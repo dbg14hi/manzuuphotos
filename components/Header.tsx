@@ -48,7 +48,7 @@ export function Header() {
         animate={{ y: 0 }}
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
           scrolled
-            ? 'bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-white/20 shadow-2xl'
+            ? 'bg-black/70 backdrop-blur-xl border-b border-white/20 shadow-2xl'
             : 'bg-transparent'
         }`}
       >
