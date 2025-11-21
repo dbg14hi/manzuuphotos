@@ -42,7 +42,7 @@ export function getPreviewUrl(publicId: string, useWatermark: boolean = true): s
     // Add watermark overlay centered with 30% opacity
     transformations.push({
       overlay: watermarkId, // Public ID of watermark image in Cloudinary
-      opacity: 30,
+      opacity: 60,
       gravity: 'center',
     })
   }
@@ -55,48 +55,24 @@ export function getPreviewUrl(publicId: string, useWatermark: boolean = true): s
   })
 }
 
-// Upload image file to Cloudinary and return public ID and secure URL
-export async function uploadImage(
-  file: File | Buffer,
-  folder: string = 'photography'
-): Promise<{ public_id: string; secure_url: string }> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      // Convert File to Buffer if needed
-      let buffer: Buffer
-      if (file instanceof File) {
-        const arrayBuffer = await file.arrayBuffer()
-        buffer = Buffer.from(arrayBuffer)
+// Delete image from Cloudinary by public ID
+export async function deleteImage(publicId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.destroy(publicId, { resource_type: 'image' }, (error) => {
+      if (error) {
+        reject(error)
       } else {
-        buffer = file
+        resolve()
       }
-
-      // Upload stream with best quality settings
-      cloudinary.uploader.upload_stream(
-        {
-          folder, // Organize images in folder
-          resource_type: 'image',
-          type: 'upload',
-          access_mode: 'public', // Make images publicly accessible
-          quality: 'auto:best', // Upload at best quality
-          eager: [], // Don't generate transformations on upload
-        },
-        (error, result) => {
-          if (error) {
-            reject(error)
-          } else if (result) {
-            resolve({
-              public_id: result.public_id,
-              secure_url: result.secure_url,
-            })
-          } else {
-            reject(new Error('Upload failed'))
-          }
-        }
-      ).end(buffer)
-    } catch (error) {
-      reject(error)
-    }
+    })
   })
+}
+
+// Delete multiple images from Cloudinary
+export async function deleteImages(publicIds: string[]): Promise<void> {
+  await Promise.all(publicIds.map((publicId) => deleteImage(publicId).catch((error) => {
+    // Log error but don't fail entire operation if one image fails to delete
+    console.error(`Failed to delete image ${publicId}:`, error)
+  })))
 }
 
