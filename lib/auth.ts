@@ -2,15 +2,28 @@ import { createClient } from '@/lib/supabase/server'
 
 // Check if current user is admin by comparing email with ADMIN_EMAIL env var
 export async function getAdminUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
 
-  if (error || !user) {
-    return null
-  }
+    // Handle refresh token errors gracefully - these occur when no session exists
+    if (error) {
+      // Refresh token not found is expected when user is not logged in
+      if (error.message?.includes('refresh_token_not_found') || 
+          error.message?.includes('Refresh Token Not Found')) {
+        return null
+      }
+      // For other errors, log but don't throw
+      console.error('Auth error:', error.message)
+      return null
+    }
+
+    if (!user) {
+      return null
+    }
 
   // Verify user email matches admin email from environment
   const adminEmail = process.env.ADMIN_EMAIL
@@ -19,11 +32,22 @@ export async function getAdminUser() {
     return null
   }
 
-  if (user.email !== adminEmail) {
+    if (user.email !== adminEmail) {
+      return null
+    }
+
+    return user
+  } catch (error) {
+    // Catch any unexpected errors and return null instead of throwing
+    // This prevents errors from breaking pages when users aren't logged in
+    if (error instanceof Error) {
+      // Only log non-refresh-token errors
+      if (!error.message.includes('refresh_token') && !error.message.includes('Refresh Token')) {
+        console.error('Unexpected auth error:', error.message)
+      }
+    }
     return null
   }
-
-  return user
 }
 
 // Custom error class for authentication failures

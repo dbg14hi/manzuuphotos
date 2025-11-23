@@ -4,7 +4,9 @@ import { requireAdmin, UnauthorizedError } from '@/lib/auth'
 
 // Upload limits and validation constants
 // Files are now uploaded directly to Cloudinary from browser, so we can accept larger files
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file (Cloudinary free tier allows up to 10MB)
+// Note: Client-side compression handles large files before upload, so we allow up to 20MB
+// Cloudinary free tier allows up to 10MB, but compressed files should be well under that
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB per file (will be compressed client-side if needed)
 const MAX_FILES = 50 // Maximum number of files per upload
 
 // Sanitize string input by trimming and limiting length

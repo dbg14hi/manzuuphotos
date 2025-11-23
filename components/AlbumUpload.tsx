@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Upload, Loader2, ImageIcon } from 'lucide-react'
 import { uploadToCloudinary } from '@/lib/cloudinary-upload'
+import { compressImage, shouldCompress } from '@/lib/image-compression'
 
 interface AlbumUploadProps {
   onSuccess?: () => void
@@ -18,11 +19,14 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
   const [price, setPrice] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({})
+  const [compressionProgress, setCompressionProgress] = useState<Record<number, boolean>>({})
   const [error, setError] = useState('')
 
   // File size limits - files upload directly to Cloudinary (bypasses Vercel limit)
-  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file (Cloudinary free tier limit)
+  // Increased to 20MB to allow larger originals, but we'll compress them automatically
+  const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB per file (allows larger originals, will be compressed)
   const MAX_FILES = 50 // Maximum number of files per upload
+  const COMPRESS_THRESHOLD_MB = 5 // Compress images larger than 5MB
 
   // Handle file selection and generate preview thumbnails
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,6 +85,7 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
     setLoading(true)
     setError('')
     setUploadProgress({})
+    setCompressionProgress({})
 
     try {
       // Upload all files directly to Cloudinary (bypasses Vercel)
@@ -89,7 +94,28 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
       await Promise.all(
         files.map(async (file, index) => {
           try {
-            const result = await uploadToCloudinary(file, 'photography', (progress) => {
+            // Compress image if it's larger than threshold
+            let fileToUpload = file
+            if (shouldCompress(file, COMPRESS_THRESHOLD_MB)) {
+              setCompressionProgress((prev) => ({ ...prev, [index]: true }))
+              try {
+                fileToUpload = await compressImage(file, {
+                  maxWidth: 3000,
+                  maxHeight: 3000,
+                  quality: 0.85,
+                  maxSizeMB: 5,
+                })
+                const originalSize = (file.size / (1024 * 1024)).toFixed(2)
+                const compressedSize = (fileToUpload.size / (1024 * 1024)).toFixed(2)
+                console.log(`Compressed ${file.name}: ${originalSize}MB → ${compressedSize}MB`)
+              } catch (compressionError) {
+                console.warn(`Compression failed for ${file.name}, using original:`, compressionError)
+                // Continue with original file if compression fails
+              }
+              setCompressionProgress((prev) => ({ ...prev, [index]: false }))
+            }
+            
+            const result = await uploadToCloudinary(fileToUpload, 'photography', (progress) => {
               setUploadProgress((prev) => ({ ...prev, [index]: progress }))
             })
             publicIds.push(result.public_id)
@@ -140,6 +166,7 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
       setFiles([])
       setPreviews([])
       setUploadProgress({})
+      setCompressionProgress({})
       setTitle('')
       setDescription('')
       setCategory('')
@@ -152,6 +179,7 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
     } finally {
       setLoading(false)
       setUploadProgress({})
+      setCompressionProgress({})
     }
   }
 
@@ -168,6 +196,8 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
           Album Images * (first image becomes thumbnail)
           <span className="text-xs text-zinc-400 ml-2 font-normal">
             (Max {MAX_FILE_SIZE / 1024 / 1024}MB per file, up to {MAX_FILES} files)
+            <br />
+            <span className="text-cyan-400">Images over {COMPRESS_THRESHOLD_MB}MB will be automatically compressed</span>
           </span>
         </label>
         <div className="mt-1 space-y-4">
@@ -184,11 +214,15 @@ export function AlbumUpload({ onSuccess }: AlbumUploadProps) {
                         Thumbnail
                       </span>
                     )}
-                    {isUploading && (
+                    {(isUploading || compressionProgress[index]) && (
                       <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                         <div className="text-center">
                           <Loader2 className="mx-auto h-6 w-6 animate-spin text-white mb-1" />
-                          <span className="text-xs text-white">{Math.round(progress || 0)}%</span>
+                          <span className="text-xs text-white">
+                            {compressionProgress[index] 
+                              ? 'Compressing...' 
+                              : `${Math.round(progress || 0)}%`}
+                          </span>
                         </div>
                       </div>
                     )}
